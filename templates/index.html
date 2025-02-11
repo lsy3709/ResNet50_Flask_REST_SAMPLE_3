@@ -96,7 +96,7 @@
             let formData = new FormData();
             formData.append("image", uploadedFile);
 
-            let endpoint = modelType === "yolo" ? "/predict2/yolo8" : `/predict/${modelType}`;
+            let endpoint = modelType === "yolo" ? "/predict/yolo" : `/predict/${modelType}`;
 
             $.ajax({
                 url: endpoint,

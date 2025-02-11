@@ -231,41 +231,66 @@ def predict_yolo():
 # 🔹 4️⃣ 이미지 분류 API (POST 요청)
 @app.route("/predict/<model_type>", methods=["POST"])
 def predict(model_type):
-    if model_type not in MODEL_CONFIGS:
-        return jsonify({"error": f"지원되지 않는 모델 유형: {model_type}"}), 400
-
     if "image" not in request.files:
         return jsonify({"error": "이미지가 업로드되지 않았습니다."}), 400
 
     file = request.files["image"]
 
-    # print("predict(model_type):, /predict/<model_type> , file : " + file)
     if file.filename == "":
         return jsonify({"error": "파일이 선택되지 않았습니다."}), 400
 
-    try:
-        model, class_labels = load_model(model_type)
+    filename = secure_filename(file.filename)
 
-        image = Image.open(io.BytesIO(file.read())).convert("RGB")
-        image = transform(image).unsqueeze(0).to(device)
+    # ✅ YOLOv8 처리 분기
+    if model_type == "yolo":
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
 
-        with torch.no_grad():
-            outputs = model(image)
-            probabilities = torch.nn.functional.softmax(outputs[0], dim=0)
-            predicted_class = torch.argmax(probabilities).item()
-            confidence = probabilities[predicted_class].item() * 100
+        output_filename = f"result_{filename}"
+        output_path = os.path.join(RESULT_FOLDER, output_filename)
 
-        result = {
-            "filename": file.filename,
-            "predicted_class": class_labels[predicted_class],
-            "confidence": f"{confidence:.2f}%",
-            "class_index": predicted_class
-        }
+        print(f"predict_yolo , filename : {filename}")
 
-        return jsonify(result)
+        # 파일 유형 확인
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+            file_type = 'image'
+        elif filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
+            file_type = 'video'
+        else:
+            return jsonify({"error": "지원되지 않는 파일 형식입니다."}), 400
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # YOLO 비동기 처리
+        thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type))
+        thread.start()
+
+        return jsonify({"message": "YOLO 모델이 파일을 처리 중입니다."})
+
+    # ✅ 일반 이미지 분류 처리
+    else:
+        try:
+            model, class_labels = load_model(model_type)
+
+            image = Image.open(io.BytesIO(file.read())).convert("RGB")
+            image = transform(image).unsqueeze(0).to(device)
+
+            with torch.no_grad():
+                outputs = model(image)
+                probabilities = torch.nn.functional.softmax(outputs[0], dim=0)
+                predicted_class = torch.argmax(probabilities).item()
+                confidence = probabilities[predicted_class].item() * 100
+
+            result = {
+                "filename": file.filename,
+                "predicted_class": class_labels[predicted_class],
+                "confidence": f"{confidence:.2f}%",
+                "class_index": predicted_class
+            }
+
+            return jsonify(result)
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
 
 
 # 🔹 5️⃣ 결과 파일 제공 API

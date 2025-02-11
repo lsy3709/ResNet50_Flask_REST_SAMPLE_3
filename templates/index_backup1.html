@@ -1,0 +1,110 @@
+{#<!DOCTYPE html>#}
+{#<html lang="ko">#}
+{#<head>#}
+{#    <meta charset="UTF-8">#}
+{#    <meta name="viewport" content="width=device-width, initial-scale=1.0">#}
+{#    <title>Flask Server - Unified Image Classification</title>#}
+{##}
+{#     <!-- ✅ CSS 파일 연결 -->#}
+{#    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">#}
+{##}
+{#    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>#}
+{#</head>#}
+{#<body>#}
+{##}
+{#    <h1>Flask Server - Unified Image Classification</h1>#}
+{#    <p>팀별 모델을 사용하여 이미지 분류를 수행할 수 있습니다.</p>#}
+{##}
+{#    <!-- 팀 1 (동물) -->#}
+{#    <div class="upload-section">#}
+{#        <h3>Team 1 (동물 분류)</h3>#}
+{#        <input type="file" id="team1-file">#}
+{#        <button onclick="uploadFile('team1')">Predict (Team1)</button>#}
+{#        <div class="result-container" id="team1-result"></div>#}
+{#        <img id="team1-preview" src="" style="display: none;">#}
+{#    </div>#}
+{##}
+{#    <!-- 팀 2 (재활용) -->#}
+{#    <div class="upload-section">#}
+{#        <h3>Team 2 (재활용 분류)</h3>#}
+{#        <input type="file" id="team2-file">#}
+{#        <button onclick="uploadFile('team2')">Predict (Team2)</button>#}
+{#        <div class="result-container" id="team2-result"></div>#}
+{#        <img id="team2-preview" src="" style="display: none;">#}
+{#    </div>#}
+{##}
+{#    <!-- 팀 3 (공구) -->#}
+{#    <div class="upload-section">#}
+{#        <h3>Team 3 (공구 분류)</h3>#}
+{#        <input type="file" id="team3-file">#}
+{#        <button onclick="uploadFile('team3')">Predict (Team3)</button>#}
+{#        <div class="result-container" id="team3-result"></div>#}
+{#        <img id="team3-preview" src="" style="display: none;">#}
+{#    </div>#}
+{##}
+{#    <!-- YOLOv8 -->#}
+{#    <div class="upload-section">#}
+{#        <h3>YOLOv8 (객체 탐지)</h3>#}
+{#        <input type="file" id="yolo-file">#}
+{#        <button onclick="uploadFile('yolo')">Predict (YOLOv8)</button>#}
+{#        <div class="result-container" id="yolo-result"></div>#}
+{#        <img id="yolo-preview" src="" style="display: none;">#}
+{#    </div>#}
+{##}
+{#    <script>#}
+{#        function uploadFile(modelType) {#}
+{#            let fileInput = document.getElementById(modelType + "-file");#}
+{#            let resultContainer = document.getElementById(modelType + "-result");#}
+{#            let previewImage = document.getElementById(modelType + "-preview");#}
+{##}
+{#            if (fileInput.files.length === 0) {#}
+{#                alert("파일을 선택하세요.");#}
+{#                return;#}
+{#            }#}
+{##}
+{#            let file = fileInput.files[0];#}
+{#            let formData = new FormData();#}
+{#            formData.append("image", file);#}
+{##}
+{#            let endpoint = modelType === "yolo" ? "/predict/yolo" : `/predict/${modelType}`;#}
+{##}
+{#            $.ajax({#}
+{#                url: endpoint,#}
+{#                type: "POST",#}
+{#                data: formData,#}
+{#                contentType: false,#}
+{#                processData: false,#}
+{#                success: function(response) {#}
+{#                    console.log(response);#}
+{#                    if (modelType === "yolo") {#}
+{#                        // YOLO 모델은 처리된 이미지 URL을 반환#}
+{#                        resultContainer.innerHTML = `<p>처리된 이미지 결과:</p><a href="${response.url}" target="_blank">결과 보기</a>`;#}
+{#                        previewImage.src = response.url;#}
+{#                        previewImage.style.display = "block";#}
+{#                    } else {#}
+{#                        // 이미지 분류 모델은 JSON 응답을 반환#}
+{#                        resultContainer.innerHTML = `#}
+{#                            <p>파일명: ${response.filename}</p>#}
+{#                            <p>예측 결과: <strong>${response.predicted_class}</strong></p>#}
+{#                            <p>정확도: ${response.confidence}</p>#}
+{#                        `;#}
+{#                    }#}
+{#                },#}
+{#                error: function(error) {#}
+{#                    console.error("Error:", error);#}
+{#                    resultContainer.innerHTML = "<p style='color:red;'>예측 실패</p>";#}
+{#                }#}
+{#            });#}
+{##}
+{#            // 이미지 미리보기#}
+{#            let reader = new FileReader();#}
+{#            reader.onload = function(e) {#}
+{#                previewImage.src = e.target.result;#}
+{#                previewImage.style.display = "block";#}
+{#            };#}
+{#            reader.readAsDataURL(file);#}
+{#        }#}
+{#    </script>#}
+{##}
+{#</body>#}
+{#</html>#}

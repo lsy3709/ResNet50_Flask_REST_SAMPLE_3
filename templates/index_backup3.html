@@ -1,0 +1,152 @@
+{#<!DOCTYPE html>#}
+{#<html lang="ko">#}
+{#<head>#}
+{#    <meta charset="UTF-8">#}
+{#    <meta name="viewport" content="width=device-width, initial-scale=1.0">#}
+{#    <title>Flask Server - Unified Image Classification</title>#}
+{##}
+{#    <!-- ✅ CSS 파일 연결 -->#}
+{#    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">#}
+{##}
+{#    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>#}
+{#    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>#}
+{#</head>#}
+{#<body>#}
+{##}
+{#    <h1>Flask Server - Unified Image Classification</h1>#}
+{#    <p>팀별 모델과 YOLOv8을 사용하여 이미지 분류 및 객체 탐지를 수행할 수 있습니다.</p>#}
+{##}
+{#    <!-- 🔹 공통 파일 업로드 UI -->#}
+{#    <div class="upload-section">#}
+{#        <h3>Upload File</h3>#}
+{#        <input type="file" id="fileInput">#}
+{#        <button onclick="uploadFile()">Upload</button>#}
+{#        <div id="loading" style="display: none; font-size: 20px; color: blue;">Processing your file... Please wait!</div>#}
+{#        <div id="result"></div>#}
+{#    </div>#}
+{##}
+{#    <!-- 🔹 모델 선택 UI -->#}
+{#    <div class="upload-section">#}
+{#        <h3>Select Model</h3>#}
+{#        <button onclick="predict('team1')">Predict (Team1 - 동물)</button>#}
+{#        <button onclick="predict('team2')">Predict (Team2 - 재활용)</button>#}
+{#        <button onclick="predict('team3')">Predict (Team3 - 공구)</button>#}
+{#        <button onclick="predict('yolo')">Predict (YOLOv8 - 객체 탐지)</button>#}
+{#    </div>#}
+{##}
+{#    <!-- 🔹 업로드된 파일 미리보기 -->#}
+{#    <div class="preview-container">#}
+{#        <img id="preview-image" src="" style="display: none; max-width: 300px; margin-top: 10px; border: 1px solid #ddd;">#}
+{#    </div>#}
+{##}
+{#    <script>#}
+{#        const socket = io(); // WebSocket 연결#}
+{#        let uploadedFile = null; // 업로드된 파일 저장#}
+{##}
+{#        // 🔹 파일 업로드 (공통)#}
+{#        function uploadFile() {#}
+{#            const fileInput = document.getElementById("fileInput");#}
+{#            if (fileInput.files.length === 0) {#}
+{#                alert("파일을 선택하세요.");#}
+{#                return;#}
+{#            }#}
+{##}
+{#            const formData = new FormData();#}
+{#            formData.append("file", fileInput.files[0]);#}
+{#            uploadedFile = fileInput.files[0]; // 저장#}
+{##}
+{#            // 로딩 표시#}
+{#            showLoading(true);#}
+{#            document.getElementById("result").innerHTML = "";#}
+{##}
+{#            fetch('/upload', {#}
+{#                method: 'POST',#}
+{#                body: formData,#}
+{#            })#}
+{#            .then(response => response.json())#}
+{#            .then(data => {#}
+{#                if (data.error) {#}
+{#                    alert(data.error);#}
+{#                    showLoading(false);#}
+{#                }#}
+{#            })#}
+{#            .catch(error => {#}
+{#                console.error("Upload error:", error);#}
+{#                showLoading(false);#}
+{#            });#}
+{##}
+{#            // 이미지 미리보기 기능 추가#}
+{#            previewImage(fileInput.files[0]);#}
+{#        }#}
+{##}
+{#        // 🔹 모델 예측 요청 (YOLOv8 = WebSocket, 팀 모델 = AJAX)#}
+{#        function predict(modelType) {#}
+{#            if (!uploadedFile) {#}
+{#                alert("먼저 파일을 업로드하세요.");#}
+{#                return;#}
+{#            }#}
+{##}
+{#            const formData = new FormData();#}
+{#            formData.append("image", uploadedFile);#}
+{##}
+{#            if (modelType === "yolo") {#}
+{#                // YOLOv8은 WebSocket을 사용하여 결과를 실시간으로 수신#}
+{#                showLoading(true);#}
+{#                document.getElementById("result").innerHTML = "";#}
+{#            } else {#}
+{#                // 팀별 모델은 AJAX 요청#}
+{#                fetch(`/predict/${modelType}`, {#}
+{#                    method: 'POST',#}
+{#                    body: formData,#}
+{#                })#}
+{#                .then(response => response.json())#}
+{#                .then(data => displayResult(data))#}
+{#                .catch(error => {#}
+{#                    console.error("Prediction error:", error);#}
+{#                    document.getElementById("result").innerHTML = "<p style='color:red;'>예측 실패</p>";#}
+{#                });#}
+{#            }#}
+{#        }#}
+{##}
+{#        // 🔹 YOLOv8 결과 수신 (WebSocket)#}
+{#        socket.on("file_processed", (data) => {#}
+{#            showLoading(false);#}
+{#            displayResult({ url: data.url });#}
+{#        });#}
+{##}
+{#        // 🔹 [공통 함수] 로딩 상태 표시#}
+{#        function showLoading(isLoading) {#}
+{#            document.getElementById("loading").style.display = isLoading ? "block" : "none";#}
+{#        }#}
+{##}
+{#        // 🔹 [공통 함수] 업로드한 파일 미리보기#}
+{#        function previewImage(file) {#}
+{#            const reader = new FileReader();#}
+{#            reader.onload = function (e) {#}
+{#                const preview = document.getElementById("preview-image");#}
+{#                preview.src = e.target.result;#}
+{#                preview.style.display = "block";#}
+{#            };#}
+{#            reader.readAsDataURL(file);#}
+{#        }#}
+{##}
+{#        // 🔹 [공통 함수] 결과 표시#}
+{#        function displayResult(data) {#}
+{#            const resultContainer = document.getElementById("result");#}
+{#            if (!data.url) {#}
+{#                resultContainer.innerHTML = "<p style='color: red;'>처리된 파일이 없습니다.</p>";#}
+{#                return;#}
+{#            }#}
+{##}
+{#            resultContainer.innerHTML = `#}
+{#                <h2>Processed File</h2>#}
+{#                ${data.url.endsWith(".mp4")#}
+{#                    ? `<video controls width="640"><source src="${data.url}" type="video/mp4">Your browser does not support the video tag.</video>`#}
+{#                    : `<img src="${data.url}" alt="Processed Image" style="max-width: 100%; height: auto;">`#}
+{#                }#}
+{#            `;#}
+{#        }#}
+{#    </script>#}
+{##}
+{#</body>#}
+{#</html>#}

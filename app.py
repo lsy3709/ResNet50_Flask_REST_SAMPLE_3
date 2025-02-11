@@ -189,45 +189,6 @@ transform = transforms.Compose([
 def index():
     return render_template('index.html')
 
-
-
-
-# 🔹 3️⃣ YOLO 예측 API (POST 요청)
-@app.route("/predict2/yolo8", methods=["POST"])
-def predict_yolo():
-    if "image" not in request.files:
-        return jsonify({"error": "이미지가 업로드되지 않았습니다."}), 400
-
-    file = request.files["image"]
-    print("predict_yolo , file : " , file.filename)
-    if file.filename == "":
-        print("🔴 ERROR: 파일명이 비어 있습니다.")  # 디버깅 로그 추가
-        return jsonify({"error": "파일이 선택되지 않았습니다."}), 400
-
-    filename = file.filename
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(file_path)
-
-    output_filename = f"result_{filename}"
-    output_path = os.path.join(RESULT_FOLDER, output_filename)
-
-    print("predict_yolo , filename : " + filename)
-
-    # 파일 유형 확인
-    if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
-        file_type = 'image'
-    elif filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
-        file_type = 'video'
-    else:
-        return jsonify({"error": "지원되지 않는 파일 형식입니다."}), 400
-
-    # YOLO 비동기 처리
-    thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type))
-    thread.start()
-
-    return jsonify({"message": "YOLO 모델이 파일을 처리 중입니다."})
-
-
 # 🔹 4️⃣ 이미지 분류 API (POST 요청)
 @app.route("/predict/<model_type>", methods=["POST"])
 def predict(model_type):
@@ -263,7 +224,14 @@ def predict(model_type):
         thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type))
         thread.start()
 
-        return jsonify({"message": "YOLO 모델이 파일을 처리 중입니다."})
+        # ✅ JSON 응답으로 이미지/동영상 링크 전달
+        return jsonify({
+            "message": "YOLO 모델이 파일을 처리 중입니다.",
+            "file_url": url_for('serve_result', filename=os.path.basename(output_path), _external=True),
+            "download_url": url_for('download_file', filename=os.path.basename(output_path), _external=True),
+            "file_type": file_type
+        })
+
 
     # ✅ 일반 이미지 분류 처리
     else:

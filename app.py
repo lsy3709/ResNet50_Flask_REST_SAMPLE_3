@@ -13,7 +13,9 @@ import threading
 import cv2
 from werkzeug.utils import secure_filename
 from ultralytics import YOLO
+import urllib.parse
 from flask import  request, send_file
+import re
 
 # ✅ Flask 앱 초기화
 app = Flask(__name__)
@@ -71,14 +73,21 @@ def process_yolo(file_path, output_path, file_type,request_id):
             result_img = results[0].plot()
             cv2.imwrite(output_path, result_img)
 
+            file_url = url_for('serve_result', filename=os.path.basename(output_path), _external=True)
+            download_url = url_for('download_file', filename=os.path.basename(output_path), _external=True)
+
+            # ✅ URL Decoding 적용 (원래 문자열 유지)
+            file_url = urllib.parse.unquote(file_url)
+            download_url = urllib.parse.unquote(download_url)
+
             # ✅ 이미지 결과를 실시간으로 전송 (화면에서 즉시 표시 가능)
             socketio.emit(
                 'file_processed',
                 {
                     "request_id": request_id,
                     "message": "YOLO 모델이 이미지 처리를 완료했습니다.",
-                    'file_url': url_for('serve_result', filename=os.path.basename(output_path), _external=True),
-                    'download_url': url_for('download_file', filename=os.path.basename(output_path), _external=True),
+                    'file_url': file_url,
+                    'download_url': download_url,
                  'type': 'image'
                 }
             )
@@ -216,13 +225,14 @@ def predict(model_type):
         return jsonify({"error": "파일이 선택되지 않았습니다."}), 400
 
     filename = file.filename
+    sanitized_filename = re.sub(r"[^\w.-]", "_", filename)  # 공백 및 특수문자를 _로 변경
 
     # ✅ YOLOv8 처리 분기
     if model_type == "yolo":
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file_path = os.path.join(UPLOAD_FOLDER, sanitized_filename)
         file.save(file_path)
 
-        output_filename = f"result_{filename}"
+        output_filename = f"result_{sanitized_filename}"
         output_path = os.path.join(RESULT_FOLDER, output_filename)
 
         print(f"predict_yolo , filename : {filename}")

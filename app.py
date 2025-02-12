@@ -113,6 +113,10 @@ def process_yolo(file_path, output_path, file_type,request_id):
             cap.release()
             out.release()
 
+            download_url = url_for('download_file', filename=os.path.basename(output_path), _external=True)
+
+            # ✅ URL Decoding 적용 (원래 문자열 유지)
+            download_url = urllib.parse.unquote(download_url)
             # ✅ Flask 컨텍스트 내에서 URL 생성
             # 처리 완료 알림
             socketio.emit(
@@ -120,7 +124,7 @@ def process_yolo(file_path, output_path, file_type,request_id):
                 {
                     "request_id": request_id,
                     "message": "YOLO 모델이 동영상 처리를 완료했습니다.",
-                    'download_url': url_for('download_file', filename=os.path.basename(output_path), _external=True)
+                    'download_url': download_url,
                 }
             )
             print(f"✅ [INFO] YOLO 처리 완료 - {output_path}")

@@ -16,12 +16,24 @@ from ultralytics import YOLO
 import urllib.parse
 from flask import  request, send_file
 import re
+import eventlet
+import eventlet.wsgi
+
+
+
 
 # ✅ Flask 앱 초기화
 app = Flask(__name__)
 CORS(app)  # CORS 허용
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+@socketio.on('connect')
+def handle_connect():
+    print("✅ 클라이언트가 WebSocket에 연결되었습니다.")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print("❌ 클라이언트가 WebSocket 연결을 종료했습니다.")
 
 # ✅ 이미지 분류 모델 설정 (팀별)
 MODEL_CONFIGS = {
@@ -169,17 +181,19 @@ def upload_file():
         # 지원하지 않는 파일 형식일 경우 400 에러를 반환합니다.
         return jsonify({"error": "Unsupported file type"}), 400
 
-    # thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type))
-    # # 새로운 스레드에서 처리 작업을 시작합니다.
-    # thread.start()
+    request_id = filename.split(".")[0]  # 파일명을 요청 ID로 사용
+
+    # YOLO 비동기 처리
+    thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type, request_id))
+    thread.start()
 
     # ✅ 업로드 성공 응답
-    # return jsonify({
-    #     "message": "파일 업로드 성공",
-    #     "filename": filename,
-    #     "file_url": url_for('uploaded_file', filename=filename, _external=True)
-    # }), 200
-    return jsonify({"message": "Processing started"})
+    return jsonify({
+        "message": "파일 업로드 성공",
+        "filename": filename,
+        "file_url": url_for('uploaded_file', filename=filename, _external=True)
+    }), 200
+
 
 # 🔹 2️⃣ 업로드된 파일 제공 API
 @app.route('/uploads/<filename>')
@@ -306,7 +320,7 @@ def serve_result(filename):
 
     # ✅ 파일이 존재하는지 확인
     if not os.path.exists(file_path):
-        return jsonify({"error": "파일이 존재하지 않습니다."}), 404
+        return jsonify({"error": f"파일 '{filename}' 이 존재하지 않습니다."}), 404
 
     print(f"📢 결과 파일 제공: {file_path}")  # 로그 출력
     return send_from_directory(RESULT_FOLDER, filename)
@@ -314,4 +328,4 @@ def serve_result(filename):
 
 # ✅ Flask 실행
 if __name__ == "__main__":
-    socketio.run(app, debug=True)
+    eventlet.wsgi.server(eventlet.listen(("0.0.0.0", 5000)), app)

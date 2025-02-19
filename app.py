@@ -59,7 +59,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ✅ YOLO 모델 로드
 yolo_model = YOLO("best.pt")
-app.config['SERVER_NAME'] = '127.0.0.1:5000'  # Flask 서버 주소와 포트 설정
+# app.config['SERVER_NAME'] = '10.100.201.87:5000'  # Flask 서버 주소와 포트 설정
 
 # ✅ 결과 저장 폴더 설정
 UPLOAD_FOLDER = 'uploads'

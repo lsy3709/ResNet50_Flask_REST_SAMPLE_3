@@ -26,15 +26,7 @@ import eventlet.wsgi
 # ✅ Flask 앱 초기화
 app = Flask(__name__)
 CORS(app)  # CORS 허용
-socketio = SocketIO(app, cors_allowed_origins="*")
 
-@socketio.on('connect')
-def handle_connect():
-    print("✅ 클라이언트가 WebSocket에 연결되었습니다.")
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    print("❌ 클라이언트가 WebSocket 연결을 종료했습니다.")
 
 # ✅ 이미지 분류 모델 설정 (팀별)
 MODEL_CONFIGS = {
@@ -78,33 +70,15 @@ os.makedirs(RESULT_FOLDER, exist_ok=True)
 processing_status = {}
 
 # 🔹 2️⃣ YOLO 비동기 처리 함수
-def process_yolo(file_path, output_path, file_type,request_id):
-    with app.app_context():
-      try:
+def process_yolo(file_path, output_path, file_type):
+    """YOLO 모델을 비동기적으로 실행"""
+    try:
+        print(f"✅ [INFO] YOLO 처리 시작 - {file_path}")
+
         if file_type == 'image':
             results = yolo_model(file_path)
             result_img = results[0].plot()
             cv2.imwrite(output_path, result_img)
-
-            file_url = url_for('serve_result', filename=os.path.basename(output_path), _external=True)
-            download_url = url_for('download_file', filename=os.path.basename(output_path), _external=True)
-
-            # ✅ URL Decoding 적용 (원래 문자열 유지)
-            file_url = urllib.parse.unquote(file_url)
-            download_url = urllib.parse.unquote(download_url)
-
-            # ✅ 이미지 결과를 실시간으로 전송 (화면에서 즉시 표시 가능)
-            socketio.emit(
-                'file_processed',
-                {
-                    "request_id": request_id,
-                    "message": "YOLO 모델이 이미지 처리를 완료했습니다.",
-                    'file_url': file_url,
-                    'download_url': download_url,
-                 'type': 'image'
-                }
-            )
-            print(f"✅ [INFO] YOLO 처리 완료 - {output_path}")
 
         elif file_type == 'video':
             cap = cv2.VideoCapture(file_path)
@@ -126,22 +100,9 @@ def process_yolo(file_path, output_path, file_type,request_id):
             cap.release()
             out.release()
 
-            download_url = url_for('download_file', filename=os.path.basename(output_path), _external=True)
+        print(f"✅ [INFO] YOLO 처리 완료 - {output_path}")
 
-            # ✅ URL Decoding 적용 (원래 문자열 유지)
-            download_url = urllib.parse.unquote(download_url)
-            # ✅ Flask 컨텍스트 내에서 URL 생성
-            # 처리 완료 알림
-            socketio.emit(
-                'file_processed',
-                {
-                    "request_id": request_id,
-                    "message": "YOLO 모델이 동영상 처리를 완료했습니다.",
-                    'download_url': download_url,
-                }
-            )
-            print(f"✅ [INFO] YOLO 처리 완료 - {output_path}")
-      except Exception as e:
+    except Exception as e:
         print(f"❌ [ERROR] YOLO 처리 중 오류 발생: {str(e)}")
 
 @app.route('/download/<filename>')
@@ -254,7 +215,7 @@ def predict(model_type):
         output_filename = f"result_{sanitized_filename}"
         output_path = os.path.join(RESULT_FOLDER, output_filename)
 
-        print(f"predict_yolo , filename : {filename}")
+        print(f"YOLO 처리 시작 predict_yolo , filename : {filename}")
 
         # 파일 유형 확인
         if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
@@ -264,21 +225,17 @@ def predict(model_type):
         else:
             return jsonify({"error": "지원되지 않는 파일 형식입니다."}), 400
 
-        # ✅ 클라이언트 요청을 추적할 request_id 생성
-        request_id = filename.split(".")[0]  # 파일명을 요청 ID로 사용
-
-        # YOLO 비동기 처리
-        thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type, request_id))
+            # ✅ YOLO 비동기 처리 (스레드 실행 후 join)
+        thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type))
         thread.start()
+        thread.join()  # ✅ YOLO 처리 완료될 때까지 대기
 
         # ✅ JSON 응답으로 이미지/동영상 링크 전달
         return jsonify({
             "message": "YOLO 모델이 파일을 처리 중입니다.",
-            "request_id": request_id,
-            # "file_url": url_for('serve_result', filename=os.path.basename(output_path), _external=True),
-            # "download_url": url_for('download_file', filename=os.path.basename(output_path), _external=True),
+            "file_url": url_for('serve_result', filename=os.path.basename(output_path), _external=True),
+            "download_url": url_for('download_file', filename=os.path.basename(output_path), _external=True),
             "file_type": file_type,
-            "status_url": url_for('check_status', request_id=request_id, _external=True)
         })
 
 
@@ -308,9 +265,6 @@ def predict(model_type):
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-@app.route("/status/<request_id>")
-def check_status(request_id):
-    return jsonify({"message": f"{request_id} 요청은 처리 중입니다. 완료되면 알림이 전송됩니다."})
 
 
 # 🔹 5️⃣ 결과 파일 제공 API

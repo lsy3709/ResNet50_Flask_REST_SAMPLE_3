@@ -4,6 +4,8 @@ import io
 import json
 import threading
 import re
+from concurrent.futures import ThreadPoolExecutor
+
 import cv2
 import numpy as np
 import torch
@@ -42,6 +44,7 @@ gru_model = None
 scalers = {}
 yolo_model = YOLO("best.pt")
 classification_models = {}
+yolo_executor = ThreadPoolExecutor(max_workers=2)  # YOLO 작업용 제한
 
 # ========== 모델 정의 ==========
 class StockPredictorRNN(nn.Module):
@@ -220,9 +223,10 @@ def predict(model_type):
             return jsonify({"error": "지원되지 않는 파일 형식입니다."}), 400
 
             # ✅ YOLO 비동기 처리 (스레드 실행 후 join)
-        thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type))
-        thread.start()
-        thread.join()  # ✅ YOLO 처리 완료될 때까지 대기
+        # thread = threading.Thread(target=process_yolo, args=(file_path, output_path, file_type))
+        # thread.start()
+        # thread.join()  # ✅ YOLO 처리 완료될 때까지 대기
+        yolo_executor.submit(process_yolo, file_path, output_path, file_type)
 
         # ✅ JSON 응답으로 이미지/동영상 링크 전달
         return jsonify({
@@ -230,6 +234,7 @@ def predict(model_type):
             "file_url": url_for('serve_result', filename=os.path.basename(output_path), _external=True),
             "download_url": url_for('download_file', filename=os.path.basename(output_path), _external=True),
             "file_type": file_type,
+            "status": "processing"
         })
 
 

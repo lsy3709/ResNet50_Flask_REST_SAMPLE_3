@@ -23,16 +23,18 @@ import eventlet.wsgi
 
 import uuid
 
+from config import AWS_BUCKET, AWS_REGION
+from utils.s3_uploader import upload_to_s3
 
 # ========== Flask 초기화 및 설정 ==========
 
 app = Flask(__name__)
 CORS(app)
-# UPLOAD_FOLDER = 'uploads'
-# RESULT_FOLDER = 'results'
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-RESULT_FOLDER = os.path.join(BASE_DIR, 'results')
+UPLOAD_FOLDER = 'uploads'
+RESULT_FOLDER = 'results'
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+# RESULT_FOLDER = os.path.join(BASE_DIR, 'results')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
@@ -143,6 +145,8 @@ def initialize_models():
 # asw 환경에서는 Gunicorn  실행으로 메인 아래 실행이 안되므로
 initialize_models()
 
+
+
 # 🔹 YOLO 처리 함수
 
 def process_yolo(file_path, output_path, file_type):
@@ -171,7 +175,9 @@ def process_yolo(file_path, output_path, file_type):
 
             cap.release()
             out.release()
-
+        # S3 업로드
+        s3_key = f"media/results/{os.path.basename(output_path)}"
+        upload_to_s3(output_path, s3_key)
     except Exception as e:
         print(f"YOLO 처리 중 오류 발생: {str(e)}")
 
@@ -238,13 +244,17 @@ def predict(model_type):
         # thread.join()  # ✅ YOLO 처리 완료될 때까지 대기
         yolo_executor.submit(process_yolo, file_path, output_path, file_type)
 
+        s3_key = f"media/results/{output_filename}"
+        s3_url = f"https://{AWS_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+
         # ✅ JSON 응답으로 이미지/동영상 링크 전달
         return jsonify({
             "message": "YOLO 모델이 파일을 처리 중입니다.",
-            "file_url": url_for('serve_result', filename=os.path.basename(output_path), _external=True),
-            "download_url": url_for('download_file', filename=os.path.basename(output_path), _external=True),
+            # "file_url": url_for('serve_result', filename=os.path.basename(output_path), _external=True),
+            # "download_url": url_for('download_file', filename=os.path.basename(output_path), _external=True),
             "file_type": file_type,
-            "status": "processing"
+            "status": "processing",
+            "s3_url": s3_url,
         })
 
 

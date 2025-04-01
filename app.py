@@ -23,29 +23,9 @@ import eventlet.wsgi
 
 import uuid
 
-# ========== 모델 및 스케일러 초기화 함수 ==========
-def initialize_models():
-    global rnn_model, lstm_model, gru_model, scalers
-
-    rnn_model = StockPredictorRNN()
-    rnn_model.load_state_dict(torch.load('./samsungStock.pth', map_location=device))
-    rnn_model.eval()
-
-    lstm_model = LSTMModel()
-    lstm_model.load_state_dict(torch.load('./samsungStock_LSTM_60days_basic.pth', map_location=device))
-    lstm_model.eval()
-
-    gru_model = GRUModel()
-    gru_model.load_state_dict(torch.load('./samsungStock_GRU.pth', map_location=device))
-    gru_model.eval()
-
-    scalers['rnn'] = torch.load('./scaler.pth')
-    scalers['lstm'] = torch.load('./scaler_LSTM_60days_basic.pth')
-    scalers['gru'] = torch.load('./scaler_GRU.pth')
 
 # ========== Flask 초기화 및 설정 ==========
-# asw 환경에서는 Gunicorn  실행으로 메인 아래 실행이 안되므로
-initialize_models()
+
 app = Flask(__name__)
 CORS(app)
 # UPLOAD_FOLDER = 'uploads'
@@ -137,6 +117,31 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
+
+
+# ========== 모델 및 스케일러 초기화 함수 ==========
+def initialize_models():
+    global rnn_model, lstm_model, gru_model, scalers
+
+    rnn_model = StockPredictorRNN()
+    rnn_model.load_state_dict(torch.load('./samsungStock.pth', map_location=device))
+    rnn_model.eval()
+
+    lstm_model = LSTMModel()
+    lstm_model.load_state_dict(torch.load('./samsungStock_LSTM_60days_basic.pth', map_location=device))
+    lstm_model.eval()
+
+    gru_model = GRUModel()
+    gru_model.load_state_dict(torch.load('./samsungStock_GRU.pth', map_location=device))
+    gru_model.eval()
+
+    scalers['rnn'] = torch.load('./scaler.pth')
+    scalers['lstm'] = torch.load('./scaler_LSTM_60days_basic.pth')
+    scalers['gru'] = torch.load('./scaler_GRU.pth')
+
+
+# asw 환경에서는 Gunicorn  실행으로 메인 아래 실행이 안되므로
+initialize_models()
 
 # 🔹 YOLO 처리 함수
 

@@ -19,11 +19,16 @@ from werkzeug.utils import secure_filename
 import eventlet
 import eventlet.wsgi
 
+import uuid
 # ========== Flask 초기화 및 설정 ==========
 app = Flask(__name__)
 CORS(app)
-UPLOAD_FOLDER = 'uploads'
-RESULT_FOLDER = 'results'
+# UPLOAD_FOLDER = 'uploads'
+# RESULT_FOLDER = 'results'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+RESULT_FOLDER = os.path.join(BASE_DIR, 'results')
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 
@@ -125,18 +130,6 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# 🔹 결과 제공 API
-@app.route('/results/<filename>')
-def serve_result(filename):
-    file_path = os.path.join(RESULT_FOLDER, filename)
-    if not os.path.exists(file_path):
-        return jsonify({"error": f"파일 '{filename}' 이 존재하지 않습니다."}), 404
-    return send_from_directory(RESULT_FOLDER, filename)
-
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
-
 # 🔹 YOLO 처리 함수
 
 def process_yolo(file_path, output_path, file_type):
@@ -205,6 +198,8 @@ def predict(model_type):
 
     filename = file.filename
     sanitized_filename = re.sub(r"[^\w.-]", "_", filename)  # 공백 및 특수문자를 _로 변경
+    unique_id = str(uuid.uuid4())
+    sanitized_filename = f"{unique_id}_{sanitized_filename}"
 
     # ✅ YOLOv8 처리 분기
     if model_type == "yolo":
@@ -214,12 +209,12 @@ def predict(model_type):
         output_filename = f"result_{sanitized_filename}"
         output_path = os.path.join(RESULT_FOLDER, output_filename)
 
-        print(f"YOLO 처리 시작 predict_yolo , filename : {filename}")
+        print(f"YOLO 처리 시작 predict_yolo , filename : {sanitized_filename}")
 
         # 파일 유형 확인
-        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+        if sanitized_filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
             file_type = 'image'
-        elif filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
+        elif sanitized_filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
             file_type = 'video'
         else:
             return jsonify({"error": "지원되지 않는 파일 형식입니다."}), 400
@@ -265,6 +260,17 @@ def predict(model_type):
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
+# 🔹 결과 제공 API
+@app.route('/results/<filename>')
+def serve_result(filename):
+    file_path = os.path.join(RESULT_FOLDER, filename)
+    if not os.path.exists(file_path):
+        return jsonify({"error": f"파일 '{filename}' 이 존재하지 않습니다."}), 404
+    return send_from_directory(RESULT_FOLDER, filename)
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 @app.route('/download/<filename>')
 def download_file(filename):
     file_path = os.path.join(RESULT_FOLDER, filename)

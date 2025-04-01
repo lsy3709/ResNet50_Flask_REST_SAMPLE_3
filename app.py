@@ -182,6 +182,11 @@ def process_yolo(file_path, output_path, file_type):
         # S3 업로드
         s3_key = f"media/results/{os.path.basename(output_path)}"
         upload_to_s3(output_path, s3_key)
+        # ✅ 처리 완료 후 원본 파일 삭제
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
     except Exception as e:
         print(f"YOLO 처리 중 오류 발생: {str(e)}")
 
@@ -229,6 +234,10 @@ def predict(model_type):
         file_path = os.path.join(UPLOAD_FOLDER, sanitized_filename)
         file.save(file_path)
 
+        # ✅ 업로드된 원본 이미지도 S3에 저장
+        original_s3_key = f"media/uploads/{sanitized_filename}"
+        upload_to_s3(file_path, original_s3_key)
+
         output_filename = f"result_{sanitized_filename}"
         output_path = os.path.join(RESULT_FOLDER, output_filename)
 
@@ -251,6 +260,7 @@ def predict(model_type):
         # aws s3 작업
         s3_key = f"media/results/{output_filename}"
         s3_url = f"https://{AWS_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+        original_url = f"https://{AWS_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{original_s3_key}"
 
         # ✅ JSON 응답으로 이미지/동영상 링크 전달
         return jsonify({
@@ -264,6 +274,7 @@ def predict(model_type):
             # aws s3 작업
             # aws s3 버전,
             "s3_url": s3_url,
+            "original_url": original_url,
         })
 
 

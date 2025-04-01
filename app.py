@@ -32,6 +32,9 @@ app = Flask(__name__)
 CORS(app)
 UPLOAD_FOLDER = 'uploads'
 RESULT_FOLDER = 'results'
+
+# aws s3 작업
+# 프로젝트 내부 저장소 버전
 # BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 # RESULT_FOLDER = os.path.join(BASE_DIR, 'results')
@@ -175,6 +178,7 @@ def process_yolo(file_path, output_path, file_type):
 
             cap.release()
             out.release()
+        # aws s3 작업
         # S3 업로드
         s3_key = f"media/results/{os.path.basename(output_path)}"
         upload_to_s3(output_path, s3_key)
@@ -244,16 +248,21 @@ def predict(model_type):
         # thread.join()  # ✅ YOLO 처리 완료될 때까지 대기
         yolo_executor.submit(process_yolo, file_path, output_path, file_type)
 
+        # aws s3 작업
         s3_key = f"media/results/{output_filename}"
         s3_url = f"https://{AWS_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
 
         # ✅ JSON 응답으로 이미지/동영상 링크 전달
         return jsonify({
             "message": "YOLO 모델이 파일을 처리 중입니다.",
+            # aws s3 작업
+            # 기본 프로젝트 내부 업로드 버전
             # "file_url": url_for('serve_result', filename=os.path.basename(output_path), _external=True),
             # "download_url": url_for('download_file', filename=os.path.basename(output_path), _external=True),
             "file_type": file_type,
             "status": "processing",
+            # aws s3 작업
+            # aws s3 버전,
             "s3_url": s3_url,
         })
 

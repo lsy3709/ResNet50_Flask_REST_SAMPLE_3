@@ -2,6 +2,7 @@ import os
 import io
 import re
 import uuid
+import gc
 import torch
 import cv2
 import numpy as np
@@ -30,11 +31,41 @@ RESULT_FOLDER = os.path.join(BASE_DIR, 'results')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+try:
+    torch.set_num_threads(1)
+except Exception:
+    pass
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 classification_models = {}
-yolo_model = YOLO("best.pt")
-yolo_executor = ThreadPoolExecutor(max_workers=2)
+yolo_model = None  # 지연 로딩
+yolo_executor = ThreadPoolExecutor(max_workers=1)  # 1GB 메모리 환경을 고려해 워커 1개로 제한
+
+def get_yolo_model():
+    # YOLO 모델 지연 로딩 및 메모리 절약 설정
+    global yolo_model
+    if yolo_model is None:
+        # 큰 가중치는 필요 시에만 로드
+        model = YOLO("best.pt")
+        # 디바이스/반정밀도 설정
+        try:
+            if device.type == "cuda":
+                model.to(device)
+                # 일부 환경에서 half 지원되지 않을 수 있어 예외 처리
+                try:
+                    model.model.half()
+                except Exception:
+                    pass
+            else:
+                model.to("cpu")
+        except Exception:
+            # 디바이스 이동 실패 시 기본 동작 유지
+            pass
+        yolo_model = model
+    return yolo_model
 
 MODEL_CONFIGS = {
     "team1": {
@@ -71,6 +102,7 @@ def load_model(model_type):
     config = MODEL_CONFIGS[model_type]
     model = models.resnet50(pretrained=False)
     model.fc = nn.Linear(model.fc.in_features, config["num_classes"])
+    # 모델 가중치 로드 시 map_location으로 메모리 사용 최소화
     model.load_state_dict(torch.load(config["model_path"], map_location=device))
     model.to(device)
     model.eval()
@@ -84,28 +116,50 @@ def get_classification_model(model_type):
 
 def process_yolo(file_path, output_path, file_type):
     try:
+        model = get_yolo_model()
+        use_cuda = device.type == "cuda"
+
         if file_type == 'image':
-            results = yolo_model(file_path)
+            results = model.predict(
+                source=file_path,
+                device=0 if use_cuda else 'cpu',
+                half=use_cuda,
+                verbose=False
+            )
             result_img = results[0].plot()
             cv2.imwrite(output_path, result_img)
         elif file_type == 'video':
             cap = cv2.VideoCapture(file_path)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            fps = int(cap.get(cv2.CAP_PROP_FPS)) or 24
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
-                results = yolo_model(frame)
+                results = model.predict(
+                    source=frame,
+                    device=0 if use_cuda else 'cpu',
+                    half=use_cuda,
+                    verbose=False
+                )
                 result_frame = results[0].plot()
                 out.write(result_frame)
             cap.release()
             out.release()
     except Exception as e:
         print(f"YOLO 처리 중 오류 발생: {str(e)}")
+    finally:
+        # 메모리 정리
+        try:
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        gc.collect()
 
 @app.post("/predict/{model_type}")
 async def predict(model_type: str, image: UploadFile = File(...)):
@@ -120,9 +174,13 @@ async def predict(model_type: str, image: UploadFile = File(...)):
     output_filename = f"result_{sanitized_filename}"
     output_path = os.path.join(RESULT_FOLDER, output_filename)
 
-    contents = await image.read()
+    # 큰 파일도 메모리 폭주 없이 디스크로 바로 기록
     with open(file_path, "wb") as f:
-        f.write(contents)
+        while True:
+            chunk = await image.read(1024 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
 
     if model_type == "yolo":
         file_type = 'image' if sanitized_filename.lower().endswith(('.jpg', '.jpeg', '.png')) else 'video'
@@ -131,18 +189,29 @@ async def predict(model_type: str, image: UploadFile = File(...)):
             "message": "YOLO 모델이 파일을 처리 중입니다.",
             "file_url": f"/results/{output_filename}",
             "download_url": f"/download/{output_filename}",
+            "url": f"/results/{output_filename}",  # 프론트 호환 필드
             "file_type": file_type,
             "status": "processing"
         }
     else:
         model, class_labels = get_classification_model(model_type)
-        image_data = Image.open(io.BytesIO(contents)).convert("RGB")
+        image_data = Image.open(file_path).convert("RGB")
         image_tensor = transform(image_data).unsqueeze(0).to(device)
         with torch.no_grad():
             outputs = model(image_tensor)
             probabilities = torch.nn.functional.softmax(outputs[0], dim=0)
             predicted_class = torch.argmax(probabilities).item()
             confidence = probabilities[predicted_class].item() * 100
+
+        # 메모리 정리
+        del image_data
+        del image_tensor
+        try:
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        gc.collect()
 
         return {
             "filename": filename,
@@ -164,3 +233,22 @@ def download_file(filename: str):
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
     return FileResponse(file_path, filename=filename, media_type='application/octet-stream')
+
+@app.get("/health")
+def health_check():
+    # 간단한 헬스체크 엔드포인트
+    return {"status": "ok"}
+
+@app.on_event("shutdown")
+def on_shutdown():
+    # 백그라운드 실행자 및 GPU 메모리 정리
+    try:
+        yolo_executor.shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
+    try:
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+    gc.collect()

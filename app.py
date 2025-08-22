@@ -14,6 +14,7 @@ from torchvision import models, transforms
 from torch import nn
 from ultralytics import YOLO
 from concurrent.futures import ThreadPoolExecutor
+import time
 
 app = FastAPI()
 
@@ -50,17 +51,17 @@ def get_yolo_model():
     if yolo_model is None:
         # 큰 가중치는 필요 시에만 로드
         model = YOLO("best.pt")
-        # 디바이스/반정밀도 설정
+        # 디바이스 설정만 적용 (half 비활성화하여 dtype 불일치 방지)
         try:
             if device.type == "cuda":
                 model.to(device)
-                # 일부 환경에서 half 지원되지 않을 수 있어 예외 처리
-                try:
-                    model.model.half()
-                except Exception:
-                    pass
             else:
                 model.to("cpu")
+            # 명시적으로 float32 사용
+            try:
+                model.model.float()
+            except Exception:
+                pass
         except Exception:
             # 디바이스 이동 실패 시 기본 동작 유지
             pass
@@ -100,7 +101,8 @@ transform = transforms.Compose([
 
 def load_model(model_type):
     config = MODEL_CONFIGS[model_type]
-    model = models.resnet50(pretrained=False)
+    # torchvision 0.13+ 에서 pretrained 대신 weights 파라미터 사용 권장
+    model = models.resnet50(weights=None)
     model.fc = nn.Linear(model.fc.in_features, config["num_classes"])
     # 모델 가중치 로드 시 map_location으로 메모리 사용 최소화
     model.load_state_dict(torch.load(config["model_path"], map_location=device))
@@ -123,7 +125,7 @@ def process_yolo(file_path, output_path, file_type):
             results = model.predict(
                 source=file_path,
                 device=0 if use_cuda else 'cpu',
-                half=use_cuda,
+                half=False,
                 verbose=False
             )
             result_img = results[0].plot()
@@ -143,7 +145,7 @@ def process_yolo(file_path, output_path, file_type):
                 results = model.predict(
                     source=frame,
                     device=0 if use_cuda else 'cpu',
-                    half=use_cuda,
+                    half=False,
                     verbose=False
                 )
                 result_frame = results[0].plot()
@@ -187,9 +189,9 @@ async def predict(model_type: str, image: UploadFile = File(...)):
         yolo_executor.submit(process_yolo, file_path, output_path, file_type)
         return {
             "message": "YOLO 모델이 파일을 처리 중입니다.",
-            "file_url": f"/results/{output_filename}",
-            "download_url": f"/download/{output_filename}",
-            "url": f"/results/{output_filename}",  # 프론트 호환 필드
+            "file_url": f"http://localhost:8000/results/{output_filename}",
+            "download_url": f"http://localhost:8000/download/{output_filename}",
+            "url": f"http://localhost:8000/results/{output_filename}",  # 프론트 호환 필드
             "file_type": file_type,
             "status": "processing"
         }
@@ -223,9 +225,16 @@ async def predict(model_type: str, image: UploadFile = File(...)):
 @app.get("/results/{filename}")
 def serve_result(filename: str):
     file_path = os.path.join(RESULT_FOLDER, filename)
+    # 결과 파일 생성 지연 대응: 최대 15초까지 대기 (300ms 간격)
+    max_wait_ms = 15000
+    interval_ms = 300
+    waited_ms = 0
+    while not os.path.exists(file_path) and waited_ms < max_wait_ms:
+        time.sleep(interval_ms / 1000.0)
+        waited_ms += interval_ms
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="파일이 존재하지 않습니다.")
-    return FileResponse(file_path)
+    return FileResponse(file_path, headers={"Cache-Control": "no-store, max-age=0"})
 
 @app.get("/download/{filename}")
 def download_file(filename: str):

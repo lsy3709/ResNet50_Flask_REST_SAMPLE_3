@@ -25,3 +25,4 @@ for %%F in ("%FILE1%" "%FILE2%") do (
 
 endlocal
 
+

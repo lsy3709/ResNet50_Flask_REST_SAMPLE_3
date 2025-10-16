@@ -58,7 +58,7 @@
 #
 #
 # # ✅ YOLO 모델 로드
-# yolo_model = YOLO("best.pt")
+# yolo_model = YOLO("best-busanit501-aqua.pt")
 # # app.config['SERVER_NAME'] = '10.100.201.87:5000'  # Flask 서버 주소와 포트 설정
 #
 # # ✅ 결과 저장 폴더 설정

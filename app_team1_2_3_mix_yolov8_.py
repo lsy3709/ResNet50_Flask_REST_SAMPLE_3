@@ -20,7 +20,7 @@
 # socketio = SocketIO(app, cors_allowed_origins="*")
 #
 # # ✅ YOLO 모델 로드
-# yolo_model = YOLO("best.pt")
+# yolo_model = YOLO("best-busanit501-aqua.pt")
 #
 # # ✅ 이미지 분류 모델 설정 (팀별)
 # MODEL_CONFIGS = {

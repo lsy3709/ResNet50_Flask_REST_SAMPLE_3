@@ -33,7 +33,7 @@
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #
 # classification_models = {}
-# yolo_model = YOLO("best.pt")
+# yolo_model = YOLO("best-busanit501-aqua.pt")
 # yolo_executor = ThreadPoolExecutor(max_workers=2)
 #
 # MODEL_CONFIGS = {

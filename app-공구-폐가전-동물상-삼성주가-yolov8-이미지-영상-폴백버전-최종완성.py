@@ -371,10 +371,6 @@ def predict2(model_type):
 
 # ==============================================================================
 # 6. Flask 앱 실행
-# 플러터 연결시,
-# pip install waitress
 # ==============================================================================
 if __name__ == '__main__':
-    from waitress import serve
-    print("🚀 Waitress 서버 시작: http://0.0.0.0:5000")
-    serve(app, host='0.0.0.0', port=5000, threads=4)
+    app.run(debug=True, port=5000)

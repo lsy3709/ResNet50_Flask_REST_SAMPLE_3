@@ -50,7 +50,7 @@
 # lstm_model = None
 # gru_model = None
 # scalers = {}
-# yolo_model = YOLO("best.pt")
+# yolo_model = YOLO("best-busanit501-aqua.pt")
 # classification_models = {}
 # yolo_executor = ThreadPoolExecutor(max_workers=2)  # YOLO 작업용 제한
 #
